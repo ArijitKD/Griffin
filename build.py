@@ -143,12 +143,17 @@ menuentry "Octuron" {
         errorfile.close()
         if (error == ""):
             print ("Compiled "+KASMFILE+" successfully. "+"Output file: "+CWD+"/"+KASMOFILE+"\n")
+            return 0
         else:
             if (os.path.isfile(KASMOFILE)):
-                print ("\nnasm compiled "+KASMFILE+", but with warnings. See below for details:")
+                print ("\nNASM compiled "+KASMFILE+", but with warnings. See below for details:")
+                print (error)
+                return 1
             else:
-                print ("\nnasm failed to compile "+KASMFILE+" successfully. See below for details:")
-            print (error)
+                print ("\nNASM failed to compile "+KASMFILE+" successfully. See below for details:")
+                print (error)
+                return -1
+            
                 
 
     def runGcc():
@@ -159,12 +164,17 @@ menuentry "Octuron" {
         errorfile.close()
         if (error == ""):
             print ("Compiled "+KCFILE+" successfully. "+"Output file: "+CWD+"/"+KCOFILE+"\n")
+            return 0
         else:
             if (os.path.isfile(KCOFILE)):
-                print ("\ngcc compiled "+KCFILE+", but with warnings. See below for details:")
+                print ("\nGCC compiled "+KCFILE+", but with warnings. See below for details:")
+                print (error)
+                return 1
             else:
-                print ("\ngcc failed to compile "+KCFILE+" successfully. See below for details:")
-            print (error)
+                print ("\nGCC failed to compile "+KCFILE+" successfully. See below for details:")
+                print (error)
+                return -1
+            
             
 
     def runLinker():
@@ -182,12 +192,17 @@ menuentry "Octuron" {
         errorfile.close()
         if (error == ""):
             print ("Linked "+KASMOFILE+" and "+KCOFILE+" successfully. Output file: "+CWD+"/"+OUTPUT_PATH+"\n")
+            return 0
         else:
             if (os.path.isfile(OUTPUT_PATH)):
-                print ("\nld linked "+KASMOFILE+" and "+KCOFILE+" but with warnings. See below for details:")
+                print ("\nLinker linked "+KASMOFILE+" and "+KCOFILE+" but with warnings. See below for details:")
+                print (error)
+                return 1
             else:
-                print ("\nld failed to link "+KASMOFILE+" and "+KCOFILE+" successfully. See below for details:")
-            print (error)
+                print ("\nLinker failed to link "+KASMOFILE+" and "+KCOFILE+" successfully. See below for details:")
+                print (error)
+                return -1
+            
 
 
     def runGrub():
@@ -203,17 +218,18 @@ menuentry "Octuron" {
             grubconfig.write(GRUBCFG)
             grubconfig.close()            
         print ("Generating final binary file for "+OSNAME+"...")
-        os.popen("grub-mkrescue -o "+OSNAME+".iso "+OSNAME+"/ 1>buildlog/grub_err.log 2>buildlog/grub_out.log").read() # grub generates stdout on signal instead of 1
+        os.popen("grub-mkrescue -o "+OSNAME+".iso "+OSNAME+"/ 1>buildlog/grub_err.log 2>buildlog/grub_out.log").read() # grub generates stdout on signal 2 instead of signal 1
         errorfile = open("buildlog/grub_err.log")
         error = errorfile.read()
         errorfile.close()
         if (error == ""):
             print ("Done!!! Built "+OSNAME+" successfully. Output ISO file generated at: "+CWD+"/"+OSNAME+".iso")
             print ("Use "+OSNAME+" in a virtual machine or try booting it on real hardware.")
-            print ("\nLog files generated during the build process are at: "+CWD+"/buildlog/.\n")
+            return 0
         else:
-            print ("grub failed to generate final ISO image "+OSNAME+".iso. See below for details:")
+            print ("GRUB failed to generate final ISO image "+OSNAME+".iso. See below for details:")
             print (error)
+            return -1
         
 
     def qemu():
@@ -242,9 +258,9 @@ menuentry "Octuron" {
             else:
                 print ("\n")
                 return
-        print( "Running "+OSNAME+" in QEMU...")
+        print( "\nRunning "+OSNAME+" in QEMU...")
         os.popen ("qemu-system-i386 -kernel "+OUTPUT_PATH).read()
-        print ("Happy OSDeving!!! :)\n")
+        print ("QEMU ran successfully and was closed.")
 
 
 
@@ -273,11 +289,21 @@ menuentry "Octuron" {
                 runIfNotInstalled(not_installed)
             
             # If the code manages to reach here, then it means that the required packages are successfully installed.
-            runNasm()
-            runGcc()
-            runLinker()
-            runGrub()
-            qemu()
+            if (runNasm() != -1):
+                if (runGcc() != -1):
+                    if (runLinker() != -1):
+                        if (runGrub() != -1):
+                            qemu()
+                        else:
+                            print ("Build failed. GRUB encountered an error.")
+                    else:
+                        print ("Build failed. Linker encountered an error.")
+                else:
+                    print ("Build failed. GCC encountered an error.")
+            else:
+                print ("Build failed. NASM encountered an error.")
+
+            print ("\nLog files generated during the build process are at: "+CWD+"/buildlog/.\n")
                 
         else:
             print ("Error: Build cannot proceed. Your platform is not supported for building "+OSNAME+" (Required: Linux, Found: "+PLATFORM.capitalize()+").")
@@ -290,11 +316,23 @@ menuentry "Octuron" {
                 os.popen("mkdir buildlog 2>/dev/null").read()
             except KeyboardInterrupt:
                 print ("\nAborted building kernel (interrupted by user)."); sys.exit(1)
-            runNasm()
-            runGcc()
-            runLinker()
-            runGrub()
-            qemu()
+
+            if (runNasm() != -1):
+                if (runGcc() != -1):
+                    if (runLinker() != -1):
+                        if (runGrub() != -1):
+                            qemu()
+                        else:
+                            print ("Build failed. GRUB encountered an error.")
+                    else:
+                        print ("Build failed. Linker encountered an error.")
+                else:
+                    print ("Build failed. GCC encountered an error.")
+            else:
+                print ("Build failed. NASM encountered an error.")
+
+            print ("\nLog files generated during the build process are at: "+CWD+"/buildlog/.\n")
+
         else:
             print ("Error: Build cannot proceed. Your platform is not supported for building "+OSNAME+" (Required: Linux, Found: "+PLATFORM.capitalize()+").")
             print ("What you can try: Install any Linux distro in a virtual machine and run build from there.\n")
