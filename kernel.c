@@ -1,6 +1,6 @@
 #include "lib/stdlib.h"
 
-#define KERNEL_VERSION      "1.0.0_pre-alpha"
+#define KERNEL_VERSION      "1.0.1_pre-alpha"
 #define PROMPT              "octuron>"
 #define CREATOR             "Arijit Kumar Das"
 
