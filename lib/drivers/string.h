@@ -22,15 +22,15 @@ CHRPTR strcopy(CHRPTR dest, const CHRPTR src)
 {
     UDWORD i=0, j=0;
     UDWORD length = strlen(src);
-
-    dest = '\0';
+    dest = NULL;
 
     while (i<length)
     {
         dest[i] = src[i];
         i++;
     }
-    dest[i] = '\0';
+    
+    dest[i] = NULL;
     return dest; 
 }
 
