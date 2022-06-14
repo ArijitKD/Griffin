@@ -1,1 +1,2 @@
-build.py, build.sh linguist-vendored
+build.py linguist-vendored
+build.sh linguist-vendored
