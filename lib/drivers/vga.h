@@ -3,7 +3,7 @@
 
 #include "types.h"
 #include "string.h"
-#include "sysio.h"
+#include "port.h"
 
 
 // Screen dimensions in VGA mode
@@ -14,9 +14,20 @@
 // Start address of video memory in VGA mode
 #define VIDMEM_START_ADDR      0xB8000
 
-#define DEFAULT                0x07     // Default text color
-#define ERROR                  0x0C     // Default text color for errors
+#define VGA_CTRL_REGISTER      0x3D4
+#define VGA_DATA_REGISTER      0x3D5
+#define VGA_OFFSET_LOW         15
+#define VGA_OFFSET_HIGH        14
 
+#ifndef VGA_PROMPT
+#define VGA_PROMPT  "octuron>"
+#endif
+
+#ifndef DEFAULT_TEXT_COLOR
+#define DEFAULT_TEXT_COLOR     0x07
+#endif
+
+/*
 // 16 Colors in VGA mode
 #define BLACK                  0x00
 #define BLUE                   0x01
@@ -34,43 +45,85 @@
 #define PINK                   0x0D
 #define YELLOW                 0x0E
 #define WHITE                  0x0F
+*/
 
 
-DWORD xcursor = 0, ycursor = 0;
+char* prompt = VGA_PROMPT;
+uint32 xcursor = 0, ycursor = 0;
 
-void clrline (UBYTE from, UBYTE to)
+uint32 getcursor()
 {
-    CHRPTR vidmem = (CHRPTR)VIDMEM_START_ADDR;
-    UWORD i = SCREEN_WIDTH * SCREEN_DEPTH * from;
+    outportb (VGA_CTRL_REGISTER, VGA_OFFSET_HIGH);
+    int32 offset = inportb (VGA_DATA_REGISTER) << 8;
+
+    outportb (VGA_CTRL_REGISTER, VGA_OFFSET_LOW);
+    offset += inportb (VGA_DATA_REGISTER);
+
+    return offset;
+}
+
+void setcursor (int offset)
+{
+    outportb (VGA_CTRL_REGISTER, VGA_OFFSET_HIGH);
+    outportb (VGA_DATA_REGISTER, (uint8)(offset >> 8));
+
+    outportb (VGA_CTRL_REGISTER, VGA_OFFSET_LOW);
+    outportb (VGA_DATA_REGISTER, (uint8)(offset & 0xFF));
+}
+
+void set_block_type_cursor(bool yes)
+{
+    if (yes)
+    {
+        outportb (VGA_CTRL_REGISTER, 0x0A);
+        outportb (VGA_DATA_REGISTER, (inportb(VGA_DATA_REGISTER) & 0xC0) | 0);
+
+        outportb (VGA_CTRL_REGISTER, 0x0B);
+        outportb (VGA_DATA_REGISTER, (inportb(VGA_DATA_REGISTER) & 0xE0) | 15);
+    }
+    else
+    {
+        //print ("insert2", DEFAULT_TEXT_COLOR) ;
+    }
+
+}
+
+void clrline (uint8 from, uint8 to)
+{
+    char* vidmem = (char*)VIDMEM_START_ADDR;
+    uint16 i = SCREEN_WIDTH * SCREEN_DEPTH * from;
 
     while (i<(SCREEN_WIDTH * SCREEN_DEPTH * (to+1)))
     {
-        vidmem[i++] = NULL;
+        vidmem[i] = NULL;
+        vidmem[i+1] = DEFAULT_TEXT_COLOR;
+        i+=2;
     }
 }
 
+/*
 void updatecursor()
 {
-    UDWORD temp = ycursor * SCREEN_WIDTH + xcursor;
+    uint32 temp = ycursor * SCREEN_WIDTH + xcursor;
     outportb (0x3D4, 14);
-    outportb (0x3D5, temp >> 8);
+    outportb (0x3D5, (temp >> 8));
     outportb (0x3D4, 15);
-    outportb (0x3D5, temp);
+    outportb (0x3D5, (temp & 0xff));
 
 }
+*/
 
 void clrscr()
 {
     clrline (0, SCREEN_HEIGHT-1);
-    xcursor = 0;
-    ycursor = 0;
-    updatecursor();
+    xcursor = ycursor = 0;
+    setcursor(0);
 }
 
-void upscroll (UBYTE line)
+void upscroll (uint8 line)
 {
-    CHRPTR vidmem = (CHRPTR)VIDMEM_START_ADDR;
-    UWORD i=0;
+    char* vidmem = (char*)VIDMEM_START_ADDR;
+    uint16 i=0;
 
     while (i<(SCREEN_WIDTH * SCREEN_DEPTH * (SCREEN_HEIGHT-1)))
     {
@@ -84,17 +137,17 @@ void upscroll (UBYTE line)
     else
         ycursor -= line;
 
-    updatecursor();
+    setcursor(getcursor());
 }
 
-void putchar (UBYTE ch, UBYTE color)
+void putchar (const char ch)
 {
-    CHRPTR vidmem = (CHRPTR)VIDMEM_START_ADDR;
+    char* vidmem = (char*)VIDMEM_START_ADDR;
 
     switch (ch)
     {
         case BACKSPACE:
-                                if (xcursor > 0)
+                                if (xcursor > strlen(prompt))
                                 {
                                     xcursor--;
                                     vidmem[(ycursor * SCREEN_WIDTH + xcursor) * SCREEN_DEPTH] = NULL;
@@ -116,7 +169,7 @@ void putchar (UBYTE ch, UBYTE color)
 
         default:
                                 vidmem[(ycursor * SCREEN_WIDTH + xcursor) * SCREEN_DEPTH] = ch;
-                                vidmem[((ycursor * SCREEN_WIDTH + xcursor) * SCREEN_DEPTH) + 1] = color;
+                                vidmem[((ycursor * SCREEN_WIDTH + xcursor) * SCREEN_DEPTH) + 1] ;
                                 xcursor++;
                                 break;
                                 
@@ -126,24 +179,32 @@ void putchar (UBYTE ch, UBYTE color)
     {
         xcursor = 0;
         ycursor++;
+        prompt = "";
     }
 
     if (ycursor >= SCREEN_HEIGHT-1)
     {
         upscroll(1);
     }
-    updatecursor();
+    setcursor(ycursor * SCREEN_WIDTH + xcursor);;
 }
 
-void print (CHRPTR string, UBYTE color)
+void print (const char* string)
 {
-    UWORD i = 0;
-    UWORD length = strlen(string);
+    uint16 i = 0;
+    uint16 length = strlen(string);
 
     while (i<length)
     {
-        putchar (string[i++], color);
+        putchar (string[i++]);
     }
+}
+
+void init_vga()
+{
+    print (concat(concat(concat(OS_NAME, " (Version: "), KERNEL_VERSION),")\n"));
+    print (concat(COPYRIGHT, "\n\n"));
+    print (concat("Initialize VGA driver:"," [  OK  ]\n"));
 }
 
 #endif

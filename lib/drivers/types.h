@@ -1,18 +1,21 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-typedef char BYTE;
-typedef unsigned char UBYTE;
+#define TRUE    1
+#define FALSE   0
 
-typedef short WORD;
-typedef unsigned short UWORD;
+typedef char bool;
 
-typedef int DWORD;
-typedef unsigned int UDWORD;
+typedef char int8;
+typedef unsigned char uint8;
 
-typedef long long QWORD;
-typedef unsigned long long UQWORD;
+typedef short int16;
+typedef unsigned short uint16;
 
-typedef char* CHRPTR;
+typedef int int32;
+typedef unsigned int uint32;
+
+typedef long long int64;
+typedef unsigned long long uint64;
 
 #endif

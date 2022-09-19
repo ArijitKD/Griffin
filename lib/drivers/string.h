@@ -11,17 +11,17 @@
 #define CARRIAGE_RETURN     0x0D
 
 
-UDWORD strlen(CHRPTR string)
+uint16 strlen(const char* string)
 {
-    DWORD i=0;
+    uint16 i=0;
     while (string[i++]);
     return i-1;
 }
 
-CHRPTR strcopy(CHRPTR dest, const CHRPTR src)
+char* strcopy(char* dest, const char* src)
 {
-    UDWORD i=0, j=0;
-    UDWORD length = strlen(src);
+    uint16 i=0, j=0;
+    uint16 length = strlen(src);
     dest = NULL;
 
     while (i<length)
@@ -34,13 +34,27 @@ CHRPTR strcopy(CHRPTR dest, const CHRPTR src)
     return dest; 
 }
 
-CHRPTR concat(CHRPTR str1, const CHRPTR str2)
+char* reverse(const char* string)
 {
-    UDWORD i=0, j=0;
-    UDWORD length = strlen(str1);
-    UDWORD total_length = length + strlen(str2);
+    uint16 length = strlen(string);
+    char* finalstr;
+    finalstr = strcopy(finalstr, string);
+    uint16 i=0;
+    while (i<length)
+    {
+        finalstr[i] = string[length-i-1];
+        i++;
+    }
+    return finalstr;
+}
 
-    CHRPTR finalstr;
+char* concat(char* str1, const char* str2)
+{
+    uint16 i=0, j=0;
+    uint16 length = strlen(str1);
+    uint16 total_length = length + strlen(str2);
+
+    char* finalstr;
     finalstr = strcopy(finalstr, str1);
 
     while (i<=total_length)
