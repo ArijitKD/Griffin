@@ -8,7 +8,7 @@ if (__name__ == "__main__"):
     KCOFILE = "kc.o"
     KCFILE = "kernel.c"
     KERNELBIN = "kernel.bin"
-    OSNAME = "Griffin"
+    OSNAME = "Griffin OS"
     OUTPUT_PATH = OSNAME+"/boot/"+KERNELBIN
     CWD = os.getcwd()
     QEMU_PKG = "qemu-system-i386"
