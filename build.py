@@ -8,14 +8,14 @@ if (__name__ == "__main__"):
     KCOFILE = "kc.o"
     KCFILE = "kernel.c"
     KERNELBIN = "kernel.bin"
-    OSNAME = "Octuron"
+    OSNAME = "Griffin"
     OUTPUT_PATH = OSNAME+"/boot/"+KERNELBIN
     CWD = os.getcwd()
     QEMU_PKG = "qemu-system-i386"
     GRUBCFG = '''set default=0
 set timeout=0
 
-menuentry "Octuron" {
+menuentry "'''+OSNAME+'''" {
         set root='(hd96)'
         multiboot /boot/kernel.bin
 }
