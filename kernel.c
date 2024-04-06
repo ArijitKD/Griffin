@@ -1,24 +1,10 @@
-#include "lib/stdlib.h"
-
-#define KERNEL_VERSION      "1.0.0_pre-alpha"
-#define PROMPT              "octuron>"
-#define CREATOR             "Arijit Kumar Das"
+#include "drivers/vga.h"
+#include "drivers/kernellib/string.h"
 
 void kmain()
 {
-    clrscr();
-
-    print (concat("Octuron ", "OS "), YELLOW);
-    print (KERNEL_VERSION, AQUA);
-    print ("\n\n", DEFAULT);
-    print ("Hello there!!! This is Octuron, an OS kernel designed by ", ROYALBLUE);
-    print (CREATOR, PINK);
-    print ("\n\n", DEFAULT);
-    print ("Do you like this kernel? Let us know :D\n\n", LIGHTGREEN);
-
-    for (UBYTE i=0; i<SCREEN_WIDTH; i++)
-    {
-        putchar ('=', PURPLE);
-    }
-    print (PROMPT, TEAL);
+  //setVGAColor(DEFAULT_VGA_COLOR);
+  clrscr();
+  print ("Griffin OS [build: 0.0.0_pre-alpha]\nCopyright (c) Arijit Kumar Das (Github: @ArijitKD). By using this software, you agree to the terms of the GNU GPL v3.0.\n\nWelcome to Griffin OS. To get started, type a command.\n\nGRIFFIN> ");
+  setVGAColor(0x0A);
 }
