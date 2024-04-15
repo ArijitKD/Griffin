@@ -1,7 +1,7 @@
 if (__name__ == "__main__"):
-    import os, sys
+    import os, sys, shutil
     from platform import system
-
+    
     PLATFORM = system().lower()
     KASMOFILE = "kasm.o"
     KASMFILE = "kernel.asm"
@@ -10,6 +10,8 @@ if (__name__ == "__main__"):
     KERNELBIN = "kernel.bin"
     OSNAME = "Griffin"
     OUTPUT_PATH = OSNAME+"/boot/"+KERNELBIN
+    CACHE_DIR = "build_cache"
+    LOG_DIR = "build_log"
     CWD = os.getcwd()
     QEMU_PKG = "qemu-system-i386"
     GRUBCFG = '''set default=0
@@ -22,24 +24,50 @@ menuentry "'''+OSNAME+'''" {
 '''
     dependencies = ["nasm", "gcc", "g++", "grub", "xorriso"]
     valid_args = ["crpi", "auto", "help"]
+    expected_compiled = {
+        KASMFILE : KASMOFILE, 
+        KCFILE : KCOFILE
+        }
+    need_compilation = []
+    first_run = False
+    nocache = False
+
 
     def checkArgs():
+        global nocache
         args = sys.argv.copy()
         length = len(args)
         if (length == 1):
-            return "crpi"
+            return "help"
         else:
             if (length > 2):
-                return "too many args"
+                if (args[2].lower() == "--nocache"):
+                    nocache = True
+                    if (args[1][0] == "-" or args[1][0] == "/"):
+                        return args[1][1::].lower()
+                    else:
+                        return args[1].lower()
+                else:    
+                    return "too many args"
             else:
-                if (args[1].startswith("-")):
-                    return args[1][1::].lower()
-                elif (args[1].startswith("/")):
+                if (args[1][0] == "-" or args[1][0] == "/"):
                     return args[1][1::].lower()
                 else:
                     return args[1].lower()
+
                     
-            
+    def checkFirstRun():
+        global need_compilation, first_run
+        if (os.path.isdir(CACHE_DIR)):
+            for src_file in expected_compiled.keys():
+                if (not os.path.isfile(CACHE_DIR+'/'+expected_compiled[src_file])):
+                    need_compilation.append(src_file)
+        else:
+            first_run = True
+            os.mkdir(CACHE_DIR)
+            for src_file in expected_compiled.keys():
+                shutil.copyfile(src_file, CACHE_DIR+"/"+src_file)
+
 
     def checkNotInstalled():
         required = []
@@ -68,13 +96,13 @@ menuentry "'''+OSNAME+'''" {
         failed_install = []
         cmd = ""
         for pkg in not_installed:
-            cmd += "sudo apt-get install "+pkg+" 2>buildlog/"+pkg+"_apterror.log"+" 1>buildlog/"+pkg+"_aptout.log;"
+            cmd += "sudo apt-get install "+pkg+" 2>"+LOG_DIR+"/"+pkg+"_apterror.log"+" 1>"+LOG_DIR+"/"+pkg+"_aptout.log;"
 
         try: os.popen(cmd).read()
         except KeyboardInterrupt: print ("Aborted (interrupted by user).\n"); sys.exit(1)
 
         for pkg in not_installed:
-            errorfile = open("buildlog/"+pkg+"_apterror.log")
+            errorfile = open(LOG_DIR+"/"+pkg+"_apterror.log")
             error = errorfile.read()
             errorfile.close()
             if (errorfile != ""):
@@ -85,7 +113,7 @@ menuentry "'''+OSNAME+'''" {
         else:
             print ("\nThe following package(s) couldn't be installed:")
             for pkg in failed_install:
-                print (pkg, "\t(Log file: "+"buildlog/"+pkg+"_apterror.log)")
+                print (pkg, "\t(Log file: "+LOG_DIR+"/"+pkg+"_apterror.log)")
             print ("\nPlease see the required log files, resolve the errors and re-run the build script.")
             print ("Aborted (package install error).\n")
             sys.exit(1)
@@ -134,32 +162,59 @@ menuentry "'''+OSNAME+'''" {
             print ("Aborted (installation cancelled by user).\n")
             sys.exit(0)
 
+    
+    def hasChanged(source_file, target_dir = CWD, cache_dir = CACHE_DIR):
+        source = open (target_dir+'/'+source_file)
+        cache = open (cache_dir+'/'+source_file)
+        source_content = source.read()
+        cache_content = cache.read()
+        source.close()
+        cache.close()
+        return (source_content != cache_content)
+        
 
-    def runNasm():       
-        print ("\nCompiling "+KASMFILE+"...")
-        os.popen("nasm -f elf32 "+KASMFILE+" -o "+KASMOFILE+" 2>buildlog/nasm_err.log 1>buildlog/nasm_out.log").read()
-        errorfile = open("buildlog/nasm_err.log")
-        error = errorfile.read()
-        errorfile.close()
-        if (error == ""):
-            print ("Compiled "+KASMFILE+" successfully. "+"Output file: "+CWD+"/"+KASMOFILE+"\n")
-            return 0
-        else:
-            if (os.path.isfile(KASMOFILE)):
-                print ("\nNASM compiled "+KASMFILE+", but with warnings. See below for details:")
-                print (error)
-                return 1
+
+    def runNasm():  # caching implemented
+        global need_compilation
+        if (first_run or (KASMFILE in need_compilation)):
+            print ("\nCompiling "+KASMFILE+"...")
+            os.popen("nasm -f elf32 "+KASMFILE+" -o "+KASMOFILE+" 2>"+LOG_DIR+"/nasm_err.log 1>"+LOG_DIR+"/nasm_out.log").read()
+            errorfile = open(LOG_DIR+"/nasm_err.log")
+            error = errorfile.read()
+            errorfile.close()
+            if (error == ""):
+                print ("Compiled "+KASMFILE+" successfully."+"Output file: "+CWD+"/"+KASMOFILE)
+                print ("Generating cache...", end=" ")
+                shutil.copyfile (KASMFILE, CACHE_DIR+"/"+KASMFILE)
+                shutil.copyfile (KASMOFILE, CACHE_DIR+"/"+KASMOFILE)
+                print ("Done.\n")
+                return 0
             else:
-                print ("\nNASM failed to compile "+KASMFILE+" successfully. See below for details:")
-                print (error)
-                return -1
+                if (os.path.isfile(KASMOFILE)):
+                    print ("\nNASM compiled "+KASMFILE+", but with warnings. See below for details:")
+                    print (error)
+                    print ("\nStatus unsafe, not generating cache.")
+                    return 1
+                else:
+                    print ("\nNASM failed to compile "+KASMFILE+" successfully. See below for details:")
+                    print (error)
+                    print ("\nStatus unsafe, not generating cache.")
+                    return -1
+        else:
+            if (not hasChanged(KASMFILE)):
+                print ("\n"+KASMFILE+" not modified, not re-compiling.\n")
+                return 0
+            else:
+                print ("\nDetected "+KASMFILE+" changed.")
+                need_compilation.append (KASMFILE)
+                runNasm()
             
                 
 
     def runGcc():
         print ("Compiling "+KCFILE+"...")
-        os.popen("gcc -m32 -c "+KCFILE+" -o "+KCOFILE+" -ffreestanding 2>buildlog/gcc_err.log 1>buildlog/gcc_out.log").read()
-        errorfile = open("buildlog/gcc_err.log")
+        os.popen("gcc -m32 -c "+KCFILE+" -o "+KCOFILE+" -ffreestanding 2>"+LOG_DIR+"/gcc_err.log 1>"+LOG_DIR+"/gcc_out.log").read()
+        errorfile = open(LOG_DIR+"/gcc_err.log")
         error = errorfile.read()
         errorfile.close()
         if (error == ""):
@@ -186,8 +241,8 @@ menuentry "'''+OSNAME+'''" {
             print ("\nAborted building kernel (interrupted by user).\n"); sys.exit(1)
 
         print ("Linking "+KASMOFILE+" and "+KCOFILE+"...")            
-        os.popen("ld -m elf_i386 -T link.ld -o "+OUTPUT_PATH+" "+KASMOFILE+" "+KCOFILE+" 2>buildlog/ld_err.log 1>buildlog/ld_out.log").read()
-        errorfile = open("buildlog/ld_err.log")
+        os.popen("ld -m elf_i386 -T link.ld -o "+OUTPUT_PATH+" "+KASMOFILE+" "+KCOFILE+" 2>"+LOG_DIR+"/ld_err.log 1>"+LOG_DIR+"/ld_out.log").read()
+        errorfile = open(LOG_DIR+"/ld_err.log")
         error = errorfile.read()
         errorfile.close()
         if (error == ""):
@@ -214,12 +269,13 @@ menuentry "'''+OSNAME+'''" {
             print ("\nAborted building kernel (interrupted by user).\n"); sys.exit(1)
 
         if (not os.path.isfile(OSNAME+"/boot/grub/grub.cfg")):
+            print ("Note: ")
             grubconfig = open (OSNAME+"/boot/grub/grub.cfg", "w")
             grubconfig.write(GRUBCFG)
             grubconfig.close()            
         print ("Generating final binary file for "+OSNAME+"...")
-        os.popen("grub-mkrescue -o "+OSNAME+".iso "+OSNAME+"/ 1>buildlog/grub_err.log 2>buildlog/grub_out.log").read() # grub generates stdout on signal 2 instead of signal 1
-        errorfile = open("buildlog/grub_err.log")
+        os.popen("grub-mkrescue -o "+OSNAME+".iso "+OSNAME+"/ 1>"+LOG_DIR+"/grub_err.log 2>"+LOG_DIR+"/grub_out.log").read() # grub generates stdout on signal 2 instead of signal 1
+        errorfile = open(LOG_DIR+"/grub_err.log")
         error = errorfile.read()
         errorfile.close()
         if (error == ""):
@@ -275,11 +331,18 @@ menuentry "'''+OSNAME+'''" {
     args = checkArgs()
 
     if (args == "crpi"):
+        if (nocache == True):
+            if (os.path.isdir(CACHE_DIR)):
+                shutil.rmtree(CACHE_DIR)
+                print ("Cache directory removed successfully.\n")
+            else:
+                print ("Cache directory not present.\n")
+        checkFirstRun()
 
         print ("Welcome to the "+OSNAME+" kernel build utility.\n")
 
         if (PLATFORM == 'linux'):
-            try: os.popen("mkdir buildlog 2>/dev/null").read()
+            try: os.popen("mkdir "+LOG_DIR+" 2>/dev/null").read()
             except KeyboardInterrupt: print ("\nAborted building kernel (interrupted by user)."); sys.exit(1)
             print ("Checking whether required packages are installed...")
             not_installed = checkNotInstalled()
@@ -303,17 +366,25 @@ menuentry "'''+OSNAME+'''" {
             else:
                 print ("Build failed. NASM encountered an error.")
 
-            print ("\nLog files generated during the build process are at: "+CWD+"/buildlog/.\n")
+            print ("\nLog files generated during the build process are at: "+CWD+"/"+LOG_DIR+"/.\n")
                 
         else:
             print ("Error: Build cannot proceed. Your platform is not supported for building "+OSNAME+" (Required: Linux, Found: "+PLATFORM.capitalize()+").")
             print ("What you can try: Install any Linux distro in a virtual machine and run build from there.\n")
 
     elif (args == "auto"):
+        if (nocache == True):
+            if (os.path.isdir(CACHE_DIR)):
+                shutil.rmtree(CACHE_DIR)
+                print ("Cache directory removed successfully.\n")
+            else:
+                print ("Cache directory not present.\n")
+        checkFirstRun()
+
         print (OSNAME+" kernel build utility. \nRunning build in auto mode.\n")
         if (PLATFORM == 'linux'):
             try:
-                os.popen("mkdir buildlog 2>/dev/null").read()
+                os.popen("mkdir "+LOG_DIR+" 2>/dev/null").read()
             except KeyboardInterrupt:
                 print ("\nAborted building kernel (interrupted by user)."); sys.exit(1)
 
@@ -331,7 +402,7 @@ menuentry "'''+OSNAME+'''" {
             else:
                 print ("Build failed. NASM encountered an error.")
 
-            print ("\nLog files generated during the build process are at: "+CWD+"/buildlog/.\n")
+            print ("\nLog files generated during the build process are at: "+CWD+"/"+LOG_DIR+"/.\n")
 
         else:
             print ("Error: Build cannot proceed. Your platform is not supported for building "+OSNAME+" (Required: Linux, Found: "+PLATFORM.capitalize()+").")
@@ -339,18 +410,22 @@ menuentry "'''+OSNAME+'''" {
 
 
     elif (args == "help"):
+        if (nocache == True):
+            print ("The --nocache flag is not supported by the -help argument.\n")
         print (OSNAME+" kernel build utility.\nFollowing are the accepted command-line arguments.\n")
         print ("-auto   : Run the build without checking for the availability of required packages. Use this flag only after running build with -crpi atleast once.")
-        print ("-help   : Show this help menu.")
         print ("-crpi   : Check whether all the required packages for the build process are installed. You will be prompted if one or more packages need to be installed. (Default)")
+        print ("\n          Along with the above arguments, a --nocache flag may be passed to make a fresh build. Recommended to be used if changes are made in the standard libraries")
+        print ("          (which are not checked for changes) or if major changes are made in the source files (to optimize the build process).")
+        print ("\n-help   : Show this help menu.")
         print ("\nAbove arguments are NOT case-sensitive, i.e. -auto is same as -Auto or -AUTO. Only ONE argument is accepted at a time.")
-        print ("\nWhen running build with -crpi flag, you will have to enter one of the three options: [Y/N/R]. They mean:")
+        print ("\nWhen running build with -crpi, you will have to enter one of the three options: [Y/N/R]. They mean:")
         print ("Y : Yes (Action will continue)\nN : No (Action will not continue)\nR : Recommended (Action will continue according to the recommended settings)")
-        print ("\nPressing enter without entering any value will cause the recommended action to be taken.\n")
+        print ("Pressing ENTER without entering any value will cause the recommended action to be taken.\n")
 
 
     elif (args == "too many args"):
-        print ("You passed too many arguments. Only one argument needs to provided.")
+        print ("You passed too many arguments. Only ONE argument can be passed, along with or without the --nocache flag.")
         print ("Use -help to get the list of available arguments and additional details.\n")
 
 
