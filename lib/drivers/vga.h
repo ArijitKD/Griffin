@@ -20,7 +20,7 @@
 #define VGA_OFFSET_HIGH        14
 
 #ifndef VGA_PROMPT
-#define VGA_PROMPT  "octuron>"
+#define VGA_PROMPT  "griffin>"
 #endif
 
 #ifndef DEFAULT_TEXT_COLOR
