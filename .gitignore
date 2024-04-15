@@ -1,7 +1,6 @@
 test/*
-Octuron/*
-buildlog/*
-Octuron.iso
+build_log/*
+build_cache/*
 kasm.o
 kc.o
 Griffin.iso
